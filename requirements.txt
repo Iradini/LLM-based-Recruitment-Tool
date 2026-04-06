@@ -1,0 +1,51 @@
+# === Core LLM / LangChain (UPDATED FOR NEWEST AGENTS) ===
+langchain==1.2.0
+langchain-core==1.2.19
+langchain-community==0.4.1
+langchain-openai==1.1.11
+langchain-google-genai==4.2.1
+langsmith==0.7.18
+langchainhub>=0.1.21
+langchain-classic==1.0.3
+
+# === LangGraph & Agent Memory (UPDATED) ===
+langgraph==1.0.2
+langgraph-checkpoint==3.0.1
+langgraph-checkpoint-sqlite==3.0.0
+# === Embeddings & Vector Stores (KEPT EXACT) ===
+langchain-huggingface==1.2.1
+langchain-chroma==1.1.0
+langchain-text-splitters==1.1.1
+sentence-transformers==5.3.0
+chromadb==1.5.5
+
+# === Experimental / Chunking (KEPT EXACT) ===
+langchain-experimental==0.4.1
+semantic-chunkers==0.1.1
+semantic-router==0.1.12
+
+# === Evaluation (KEPT EXACT) ===
+ragas==0.4.3
+
+# === Data & ML (KEPT EXACT) ===
+pandas==2.2.2
+matplotlib==3.10.8
+pydantic==2.12.3
+
+# === System / UI / Testing (KEPT STRICTLY EXACT AS REQUESTED) ===
+black==25.9.0
+chainlit==2.8.3
+pypdf==6.1.1
+PyPDF2==3.0.1
+pytest==8.4.2
+pydantic-settings==2.11.0 
+reportlab==4.4.4
+isort==6.1.0
+pyarrow>=10.0.0
+
+# === System Compatibility Pins (KEPT EXACT) ===
+opentelemetry-sdk==1.38.0
+opentelemetry-api==1.38.0
+opentelemetry-exporter-otlp-proto-grpc==1.38.0
+opentelemetry-exporter-otlp-proto-common==1.38.0
+opentelemetry-proto==1.38.0
