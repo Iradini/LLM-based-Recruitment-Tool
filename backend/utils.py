@@ -66,8 +66,12 @@ def pdf_to_markdown(pdf_bytes: BytesIO) -> str:
     """
     # TODO: Read the raw bytes from the PDF and encode them as base64.
     # Hint: Use `pdf_bytes.read()` and `base64.standard_b64encode()`.
+    pdf_bytes.seek(0)
+    raw_pdf = pdf_bytes.read()
+    b64 = base64.standard_b64encode(raw_pdf).decode("utf-8")
 
     # TODO: Get an LLM instance using the `get_llm` factory function.
+    llm = get_llm()
 
     # TODO: Create a `HumanMessage` with multimodal content (text + media).
     # The message content should be a list with two items:
@@ -75,7 +79,20 @@ def pdf_to_markdown(pdf_bytes: BytesIO) -> str:
     # 2. A media block with `mime_type: "application/pdf"` and the base64 data.
     # Hint: Use `{"type": "text", "text": "..."}` and
     #       `{"type": "media", "mime_type": "application/pdf", "data": b64}`.
+    human_msg = HumanMessage(
+        content=[
+            {"type": "text", "text": "Convert the following PDF to clean markdown:"},
+            {"type": "media", "mime_type": "application/pdf", "data": b64}
+        ]
+    )
 
     # TODO: Invoke the LLM with the message and return the response content.
     # Note: Gemini may return a list of content parts instead of a plain string.
     # If so, join the text parts together.
+    response = llm.invoke(human_msg)
+
+    if isinstance(response.content, list):
+        return "".join(
+            part["text"] for part in response.content if part.get("text")
+        )
+    return response.content
