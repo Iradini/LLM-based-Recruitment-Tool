@@ -62,6 +62,7 @@ class ChatAssistant:
             prompt=self.prompt,
             memory=ConversationBufferWindowMemory(k=history_length),
             output_key="output",
+            verbose=settings.LANGCHAIN_VERBOSE,
         )
 
     def predict(self, human_input: str) -> str:

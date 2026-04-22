@@ -27,19 +27,14 @@ def get_resume_summarizer_chain():
 
     # TODO: Create an instance of an LLM using the `get_llm` factory function with the appropriate settings.
     # Hint: You need to pass `temperature` parameter.
-    llm = get_llm(
-        model=settings.GEMINI_LLM_MODEL,
-        api_key=settings.GOOGLE_API_KEY,
-        temperature=0,
-    )
+    llm = get_llm(temperature=0,)
 
-
-    # TODO: Create an instance of `LLMChain` with the appropriate settings.
+# TODO: Create an instance of `LLMChain` with the appropriate settings.
     # This chain must combine our prompt and an llm. It doesn't need a memory.
     resume_summarizer_chain = LLMChain(
         llm=llm,
         prompt=prompt,
-        output_key="resume_summary",
+        verbose=True,
     )
 
     return resume_summarizer_chain

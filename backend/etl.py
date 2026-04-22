@@ -94,8 +94,8 @@ class ETLProcessor:
             "description", "Employment type", "Seniority level", "company", "location", "post_url", "title"
         ]
         
-        df = pd.read_csv(self.dataset_path, usecols=columns)
-        df.dropna(subset=columns, inplace=True)
+        df = pd.read_csv(self.dataset_path)
+        df = df[columns].dropna(subset=columns)
         return df
 
     def create_documents(self, descriptions: pd.DataFrame) -> List[Document]:
