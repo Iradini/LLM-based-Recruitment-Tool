@@ -61,12 +61,7 @@ class ETLProcessor:
             model_name=embedding_model
         )
         self.collection_name = collection_name
-        self.persist_directory = persist_directory
-
-        # TODO: Create a text splitter using the
-        # `RecursiveCharacterTextSplitter` class.
-        # Hint: Use the `chunk_size` and `chunk_overlap` parameters.
-        # Hint: Also pass `length_function=len` and `add_start_index=True`.
+        self.persist_directory = persist_directory        
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
@@ -83,13 +78,6 @@ class ETLProcessor:
         df : pd.DataFrame
             Jobs descriptions with extra metadata from the dataset.
         """
-        # TODO: Load the dataset from the `dataset_path` using the
-        # `pandas.read_csv()` function.
-        # Keep only the following columns: "description", "Employment type",
-        # "Seniority level", "company", "location", "post_url", "title".
-        # Discard the rest.
-        # Drop the entire row if any nan values are found on some of the
-        # chosen columns.
         columns = [
             "description", "Employment type", "Seniority level", "company", "location", "post_url", "title"
         ]
