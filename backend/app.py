@@ -55,7 +55,8 @@ async def on_chat_start():
 
         if files:
             file = files[0]
-            resume = pdf_to_markdown(open(file.path, "rb"))
+            with open(file.path, "rb") as pdf_file:
+                resume = pdf_to_markdown(pdf_file)
 
             if chat_profile == "Jobs finder Assistant":
                 model = JobsFinderAssistant(

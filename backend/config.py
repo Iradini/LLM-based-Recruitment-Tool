@@ -7,7 +7,6 @@ from pydantic_settings import BaseSettings
 load_dotenv(find_dotenv(".env"))
 
 root = Path(__file__).parent.parent
-print("root", root)
 
 
 class Settings(BaseSettings):

@@ -76,7 +76,7 @@ def pdf_to_markdown(pdf_bytes: BytesIO) -> str:
         ]
     )
 
-    response = llm.invoke(human_msg)
+    response = llm.invoke([human_msg])
 
     if isinstance(response.content, list):
         return "".join(

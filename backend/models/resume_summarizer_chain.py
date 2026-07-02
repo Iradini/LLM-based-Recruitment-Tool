@@ -24,7 +24,7 @@ def get_resume_summarizer_chain():
     resume_summarizer_chain = LLMChain(
         llm=llm,
         prompt=prompt,
-        verbose=True,
+        verbose=settings.LANGCHAIN_VERBOSE,
     )
 
     return resume_summarizer_chain

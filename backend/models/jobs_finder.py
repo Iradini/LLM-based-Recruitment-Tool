@@ -8,6 +8,22 @@ from backend.retriever import Retriever
 
 resume_summarizer = get_resume_summarizer_chain()
 
+def format_jobs(docs) -> str:
+    formatted = []
+    for i, doc in enumerate(docs, 1):
+        meta = doc.metadata
+        formatted.append(
+            f"Job {i}:\n"
+            f"Title: {meta.get('title', 'N/A')}\n"
+            f"Company: {meta.get('company', 'N/A')}\n"
+            f"Location: {meta.get('location', 'N/A')}\n"
+            f"Employment Type: {meta.get('employment_type', 'N/A')}\n"
+            f"Seniority: {meta.get('seniority_level', 'N/A')}\n"
+            f"URL: {meta.get('post_url', 'N/A')}\n"
+            f"Description excerpt: {doc.page_content}\n"
+        )
+    return "\n".join(formatted)
+
 
 class JobsFinderAssistant:
     def __init__(
@@ -36,17 +52,27 @@ class JobsFinderAssistant:
         # Make a summary of the resume for the queries
         # Use resume_summarizer_chain.
         self.resume = resume
-        self.resume_summary = resume_summarizer.invoke(resume)
+        result = resume_summarizer.invoke({"resume": resume})
+        self.resume_summary = result["text"]
 
         # Initialize the jobs retriever
         self.retriever = Retriever()
 
         template = (
-            "You are helpful and knowledgeable job finder. Use the resume and the job search results "
-            "below to help the human find relevant job opportunities.\n\n"
+            "You are a job matching assistant. Your ONLY job is to present the job postings "
+            "retrieved below and explain how they relate to the candidate's resume.\n\n"
+            "STRICT RULES:\n"
+            "- Only reference jobs that appear in the 'Relevant job postings' section below. "
+            "Do not suggest, invent, or recall any jobs from outside this list.\n"
+            "- Only reference skills, experience, or qualifications that appear explicitly "
+            "in the resume below. Do not infer or assume anything about the candidate.\n"
+            "- If the retrieved jobs are a poor match, say so honestly rather than "
+            "inventing reasons they might fit.\n"
+            "- If you cannot answer from the provided data, say: "
+            "'I don't have enough information to answer that from the current search results.'\n\n"
             "Resume:\n{resume}\n\n"
             "Chat history:\n{history}\n\n"
-            "Relevant job postings:\n{search_results}\n\n"
+            "Relevant job postings retrieved:\n{search_results}\n\n"
             "Human: {human_input}\n"
             "AI assistant:"
         )
@@ -90,9 +116,10 @@ class JobsFinderAssistant:
 
         
         jobs = self.retriever.search(human_input + " " + self.resume_summary)
+        formatted_jobs = format_jobs(jobs)
 
         model_answer = self.model.invoke(
-            {"resume": self.resume, "search_results": jobs, "human_input": human_input}
+            {"resume": self.resume, "search_results": formatted_jobs, "human_input": human_input}
         )
 
         return model_answer
@@ -161,4 +188,4 @@ Member, Association for Computing Machinery (ACM)
         human_input="I'm looking for a job as a software engineer."
     )
 
-    print(output["text"])
+    print(output["output"])
