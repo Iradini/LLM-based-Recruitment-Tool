@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     LANGCHAIN_VERBOSE: bool = False
 
     # Document Ingestion
-    DATASET_PATH: Optional[str] = f"{root}/dataset/jobs.csv"
-    CHROMA_DB_PATH: Optional[str] = f"{root}/chroma"
+    DATASET_PATH: Optional[str] = str(root / "dataset" / "jobs.csv")
+    CHROMA_DB_PATH: Optional[str] = str(root / "chroma")
     CHROMA_COLLECTION: Optional[str] = "jobs"
     EMBEDDINGS_MODEL: Optional[str] = "paraphrase-MiniLM-L6-v2"
 

@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: llm-recruitment-tool
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: chainlit run backend/app.py --host 0.0.0.0 --port $PORT --headless
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_LLM_MODEL
+        value: gemini-3.1-flash-lite-preview
+      - key: PYTHON_VERSION
+        value: 3.11.15
