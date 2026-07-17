@@ -62,5 +62,4 @@ ipython_config.py
 .chainlit/
 db/*
 !db/.gitkeep
-chroma
 chainlit.md
