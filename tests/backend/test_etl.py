@@ -2,17 +2,18 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
+from backend.config import settings
 from backend.etl import ETLProcessor
 
 
 @patch("backend.etl.Chroma.from_documents")
-@patch("backend.etl.SentenceTransformerEmbeddings")
+@patch("backend.etl.GoogleGenerativeAIEmbeddings")
 @patch("backend.etl.RecursiveCharacterTextSplitter")
 @patch("backend.etl.pd.read_csv")
 def test_run_etl(
     pd_read_csv_mock,
     text_splitter_mock,
-    sentence_transformer_mock,
+    google_embeddings_mock,
     chroma_mock,
 ):
     # Mock the necessary dependencies
@@ -54,10 +55,12 @@ def test_run_etl(
         length_function=len,
         add_start_index=True,
     )
-    sentence_transformer_mock.assert_called_once_with(model_name="test_model")
+    google_embeddings_mock.assert_called_once_with(
+        model="test_model", google_api_key=settings.GOOGLE_API_KEY
+    )
     chroma_mock.assert_called_once_with(
         text_splitter_mock.return_value.split_documents.return_value,
-        embedding=sentence_transformer_mock.return_value,
+        embedding=google_embeddings_mock.return_value,
         collection_name="test_collection",
         persist_directory="test_directory",
     )

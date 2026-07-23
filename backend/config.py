@@ -20,7 +20,12 @@ class Settings(BaseSettings):
     DATASET_PATH: Optional[str] = str(root / "dataset" / "jobs.csv")
     CHROMA_DB_PATH: Optional[str] = str(root / "chroma")
     CHROMA_COLLECTION: Optional[str] = "jobs"
-    EMBEDDINGS_MODEL: Optional[str] = "paraphrase-MiniLM-L6-v2"
+    EMBEDDINGS_MODEL: Optional[str] = "gemini-embedding-001"
+
+    # Remote chroma store (used to fetch chroma/ on startup if not present
+    # locally, e.g. on Render, since the store is too large to commit to git)
+    GCS_BUCKET_NAME: Optional[str] = ""
+    GCS_CHROMA_BLOB: Optional[str] = "chroma.zip"
 
 
 settings = Settings()

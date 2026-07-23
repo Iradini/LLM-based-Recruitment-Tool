@@ -1,11 +1,10 @@
+import time
 from typing import List, Optional
 
 import pandas as pd
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings.sentence_transformer import (
-    SentenceTransformerEmbeddings,
-)
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores.chroma import Chroma
 from tqdm import tqdm
 
@@ -46,8 +45,8 @@ class ETLProcessor:
             Path to csv file containing the dataset.
 
         embedding_model : str, optional
-            Name of the embedding model to be used, e.g.
-            "paraphrase-MiniLM-L6-v2".
+            Name of the Google embedding model to be used, e.g.
+            "gemini-embedding-001".
 
         collection_name : str, optional
             Name of the collection to be used in the vector store.
@@ -57,8 +56,9 @@ class ETLProcessor:
         """
         self.dataset_path = dataset_path
         self.batch_size = batch_size
-        self.embedding = SentenceTransformerEmbeddings(
-            model_name=embedding_model
+        self.embedding = GoogleGenerativeAIEmbeddings(
+            model=embedding_model,
+            google_api_key=settings.GOOGLE_API_KEY,
         )
         self.collection_name = collection_name
         self.persist_directory = persist_directory        
@@ -133,7 +133,41 @@ class ETLProcessor:
         """
         return self.text_splitter.split_documents(documents)
 
-    def process_batches(self, splits: List[Document]) -> None:
+    # Error statuses that retrying can't fix: bad model name, bad/revoked key,
+    # missing permissions, or a malformed request. Everything else (rate
+    # limits, dropped connections, timeouts, transient 5xx errors) is retried.
+    _PERMANENT_ERROR_STATUSES = (
+        "NOT_FOUND",
+        "PERMISSION_DENIED",
+        "UNAUTHENTICATED",
+        "INVALID_ARGUMENT",
+        "UNIMPLEMENTED",
+    )
+
+    def _add_batch_with_retry(self, batch: List[Document], max_wait: int = 90) -> None:
+        """
+        Embeds and stores a single batch, retrying with exponential backoff
+        on transient failures (rate limits, network errors, etc). Permanent
+        errors (e.g. an invalid model name or API key) are raised immediately.
+        """
+        delay = 5
+        while True:
+            try:
+                Chroma.from_documents(
+                    batch,
+                    embedding=self.embedding,
+                    collection_name=self.collection_name,
+                    persist_directory=self.persist_directory,
+                )
+                return
+            except Exception as e:
+                if any(status in str(e) for status in self._PERMANENT_ERROR_STATUSES):
+                    raise
+                tqdm.write(f"Transient error ({e}); retrying in {delay}s...")
+                time.sleep(delay)
+                delay = min(delay * 2, max_wait)
+
+    def process_batches(self, splits: List[Document], start_index: int = 0) -> None:
         """
         Processes documents in batches, creating Chroma vector stores for
         each batch.
@@ -143,35 +177,57 @@ class ETLProcessor:
         splits : List[Document]
             List of Document objects to be processed.
 
+        start_index : int, optional
+            Number of already-processed chunks to skip, for resuming an
+            interrupted run. Default is 0 (process everything).
+
         Returns
         -------
         None
         """
+        remaining = splits[start_index:]
         for i in tqdm(
-            range(0, len(splits), self.batch_size), desc="Processing batches"
+            range(0, len(remaining), self.batch_size), desc="Processing batches"
         ):
-            Chroma.from_documents(
-                splits[i: i + self.batch_size],
-                embedding=self.embedding,
-                collection_name=self.collection_name,
-                persist_directory=self.persist_directory,
-            )
+            batch = remaining[i: i + self.batch_size]
+            self._add_batch_with_retry(batch)
 
-    def run_etl(self) -> None:
+    def run_etl(self, start_index: int = 0) -> None:
         """
         Executes the ETL process: extract data from a source, transform it,
         and load into a new storage.
+
+        Parameters
+        ----------
+        start_index : int, optional
+            Number of already-processed chunks to skip, for resuming an
+            interrupted run. Default is 0 (process everything).
         """
         job_descriptions = self.load_data()
-        docs = self.create_documents(job_descriptions)[:100]
+        docs = self.create_documents(job_descriptions)
         splits = self.split_documents(docs)
-        self.process_batches(splits)
+        self.process_batches(splits, start_index=start_index)
 
 
 if __name__ == "__main__":
+    import chromadb
+
     etl_processor = ETLProcessor(
         batch_size=32,
         chunk_size=500,
         chunk_overlap=100,
     )
-    etl_processor.run_etl()
+
+    # Resume support: if a previous run was interrupted, skip the chunks
+    # already embedded in the persisted collection instead of starting over.
+    start_index = 0
+    try:
+        client = chromadb.PersistentClient(path=etl_processor.persist_directory)
+        collection = client.get_collection(etl_processor.collection_name)
+        start_index = collection.count()
+        if start_index:
+            print(f"Resuming: {start_index} chunks already embedded, skipping them.")
+    except Exception:
+        pass  # no existing collection yet, start from the beginning
+
+    etl_processor.run_etl(start_index=start_index)

@@ -12,3 +12,12 @@ services:
         value: gemini-3.1-flash-lite-preview
       - key: PYTHON_VERSION
         value: 3.11.15
+      - key: GCS_BUCKET_NAME
+        value: iradini-jobs-chroma
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/gcs-service-account.json
+    # Secret Files aren't part of the Blueprint spec - add this manually in
+    # the dashboard: Environment tab -> Secret Files -> path
+    # /etc/secrets/gcs-service-account.json -> paste the service account
+    # JSON key contents. Downloads chroma/ from GCS_BUCKET_NAME at startup
+    # if not already present locally (see backend/retriever.py).

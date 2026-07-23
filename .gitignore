@@ -56,6 +56,9 @@ ipython_config.py
 # Environments
 .env
 
+# GCP service account credentials - never commit these
+*.json
+
 *.pdf
 .vscode/
 .DS_Store
@@ -63,3 +66,10 @@ ipython_config.py
 db/*
 !db/.gitkeep
 chainlit.md
+
+# Chroma vector store: too large to commit, fetched from GCS at startup
+# instead (see backend/retriever.py). Run backend/etl.py to rebuild it
+# locally, then upload chroma.zip to the configured GCS bucket.
+chroma/
+chroma.zip
+chroma_download.zip
