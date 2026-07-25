@@ -6,6 +6,14 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 import chainlit as cl
 
+# python-engineio hardcodes a 16-packet limit per payload, which HTTP
+# long-polling (the fallback transport behind proxies like Render's, when
+# the WebSocket upgrade doesn't stick) can exceed even for small file
+# uploads. Raise it before any connection is handled.
+from engineio.payload import Payload
+
+Payload.max_decode_packets = 500
+
 from models.chatgpt_clone import ChatAssistant
 from models.jobs_finder import JobsFinderAssistant
 from models.jobs_finder_agent import JobsFinderAgent
