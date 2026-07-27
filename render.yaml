@@ -16,6 +16,8 @@ services:
         value: iradini-jobs-chroma
       - key: GOOGLE_APPLICATION_CREDENTIALS
         value: /etc/secrets/gcs-service-account.json
+      - key: PYTHONUNBUFFERED
+        value: "1"
     # Secret Files aren't part of the Blueprint spec - add this manually in
     # the dashboard: Environment tab -> Secret Files -> path
     # /etc/secrets/gcs-service-account.json -> paste the service account
