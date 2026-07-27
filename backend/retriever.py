@@ -48,30 +48,69 @@ def _ensure_chroma_store() -> None:
 
     from google.cloud import storage
 
-    print(f"[chroma] downloading gs://{settings.GCS_BUCKET_NAME}/{settings.GCS_CHROMA_BLOB} ...")
     client = storage.Client()
     bucket = client.bucket(settings.GCS_BUCKET_NAME)
     blob = bucket.blob(settings.GCS_CHROMA_BLOB)
+    blob.reload()  # populate .size from GCS metadata
+    expected_size = blob.size
+    print(
+        f"[chroma] downloading gs://{settings.GCS_BUCKET_NAME}/{settings.GCS_CHROMA_BLOB} "
+        f"({expected_size / 1024 / 1024:.1f} MB expected)..."
+    )
 
-    tmp_dir = Path(tempfile.mkdtemp(prefix="chroma_dl_"))
-    try:
-        zip_path = tmp_dir / "chroma.zip"
-        blob.download_to_filename(str(zip_path))
-        print(f"[chroma] downloaded {zip_path.stat().st_size / 1024 / 1024:.1f} MB, extracting...")
-        with zipfile.ZipFile(zip_path) as zf:
-            zf.extractall(tmp_dir)
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        tmp_dir = Path(tempfile.mkdtemp(prefix="chroma_dl_"))
+        try:
+            zip_path = tmp_dir / "chroma.zip"
+            blob.download_to_filename(str(zip_path))
 
-        extracted_root = tmp_dir / chroma_path.name
-        if not extracted_root.exists():
-            raise RuntimeError(
-                f"[chroma] expected '{chroma_path.name}/' inside the downloaded zip, "
-                f"found: {[p.name for p in tmp_dir.iterdir()]}"
-            )
-        if chroma_path.exists():
-            shutil.rmtree(chroma_path)
-        shutil.move(str(extracted_root), str(chroma_path))
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+            actual_size = zip_path.stat().st_size
+            if actual_size != expected_size:
+                raise IOError(
+                    f"downloaded {actual_size} bytes, expected {expected_size} "
+                    "- transfer looks incomplete."
+                )
+
+            with zipfile.ZipFile(zip_path) as zf:
+                bad_entry = zf.testzip()
+                if bad_entry is not None:
+                    raise IOError(f"zip integrity check failed on entry '{bad_entry}' - download is corrupted.")
+
+                print(f"[chroma] downloaded and verified {actual_size / 1024 / 1024:.1f} MB, extracting...")
+                for info in zf.infolist():
+                    # Defensive: zips built on Windows can store paths with
+                    # backslashes, which zipfile only treats as a directory
+                    # separator on Windows itself. Normalize so extraction
+                    # is correct regardless of platform either way.
+                    normalized_name = info.filename.replace("\\", "/")
+                    target = tmp_dir / normalized_name
+                    if normalized_name.endswith("/"):
+                        target.mkdir(parents=True, exist_ok=True)
+                        continue
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open(info) as source, open(target, "wb") as dest:
+                        shutil.copyfileobj(source, dest)
+
+            extracted_root = tmp_dir / chroma_path.name
+            if not extracted_root.exists():
+                raise RuntimeError(
+                    f"expected '{chroma_path.name}/' inside the downloaded zip, "
+                    f"found: {[p.name for p in tmp_dir.iterdir()]}"
+                )
+            if chroma_path.exists():
+                shutil.rmtree(chroma_path)
+            shutil.move(str(extracted_root), str(chroma_path))
+            break
+        except Exception as e:
+            print(f"[chroma] attempt {attempt}/{max_attempts} failed: {e}")
+            shutil.rmtree(chroma_path, ignore_errors=True)
+            if attempt == max_attempts:
+                raise RuntimeError(
+                    f"[chroma] failed to download a valid store after {max_attempts} attempts."
+                ) from e
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     if not _is_populated(chroma_path):
         raise RuntimeError(
