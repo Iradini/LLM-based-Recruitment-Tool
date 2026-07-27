@@ -148,6 +148,7 @@ def load_vector_store() -> Chroma:
         embedding_function=GoogleGenerativeAIEmbeddings(
             model=settings.EMBEDDINGS_MODEL,
             google_api_key=settings.GOOGLE_API_KEY,
+            output_dimensionality=settings.EMBEDDINGS_DIMENSIONS,
         ),
     )
 

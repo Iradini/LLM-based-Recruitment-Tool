@@ -56,7 +56,9 @@ def test_run_etl(
         add_start_index=True,
     )
     google_embeddings_mock.assert_called_once_with(
-        model="test_model", google_api_key=settings.GOOGLE_API_KEY
+        model="test_model",
+        google_api_key=settings.GOOGLE_API_KEY,
+        output_dimensionality=settings.EMBEDDINGS_DIMENSIONS,
     )
     chroma_mock.assert_called_once_with(
         text_splitter_mock.return_value.split_documents.return_value,

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     CHROMA_DB_PATH: Optional[str] = str(root / "chroma")
     CHROMA_COLLECTION: Optional[str] = "jobs"
     EMBEDDINGS_MODEL: Optional[str] = "gemini-embedding-001"
+    # Reduced via Matryoshka-style output truncation (supported natively by
+    # gemini-embedding-001) so the HNSW index fits in Render's 512MB free
+    # tier; the full 3072-dim index alone needs ~850MB to load into memory.
+    EMBEDDINGS_DIMENSIONS: Optional[int] = 256
 
     # Remote chroma store (used to fetch chroma/ on startup if not present
     # locally, e.g. on Render, since the store is too large to commit to git)

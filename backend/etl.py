@@ -59,6 +59,7 @@ class ETLProcessor:
         self.embedding = GoogleGenerativeAIEmbeddings(
             model=embedding_model,
             google_api_key=settings.GOOGLE_API_KEY,
+            output_dimensionality=settings.EMBEDDINGS_DIMENSIONS,
         )
         self.collection_name = collection_name
         self.persist_directory = persist_directory        
