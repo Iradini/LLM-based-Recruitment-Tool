@@ -11,20 +11,6 @@ from langchain_community.vectorstores.chroma import Chroma
 from backend.config import settings
 
 
-def _log(msg: str) -> None:
-    """print() with an immediate flush and current RSS memory, since
-    buffered stdout can be lost entirely if the process is killed (e.g. by
-    an OOM kill) before the buffer would otherwise flush on its own."""
-    try:
-        import resource
-
-        rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
-        msg = f"{msg} [rss={rss_mb:.0f}MB]"
-    except ImportError:
-        pass  # resource module is Linux/Mac only, not available on Windows
-    print(msg, flush=True)
-
-
 def _is_populated(chroma_path: Path) -> bool:
     """
     Checks whether chroma_path holds a collection that actually has
@@ -53,25 +39,22 @@ def _ensure_chroma_store() -> None:
     valid one.
     """
     chroma_path = Path(settings.CHROMA_DB_PATH)
-    _log(f"[chroma] _ensure_chroma_store starting, checking {chroma_path}")
     if _is_populated(chroma_path):
-        _log(f"[chroma] found populated store at {chroma_path}, skipping GCS download.")
         return
     if not settings.GCS_BUCKET_NAME:
-        _log("[chroma] no local store and GCS_BUCKET_NAME is not set; nothing to load from.")
         return
 
     from google.cloud import storage
 
-    _log("[chroma] constructing GCS client...")
     client = storage.Client()
     bucket = client.bucket(settings.GCS_BUCKET_NAME)
     blob = bucket.blob(settings.GCS_CHROMA_BLOB)
     blob.reload()  # populate .size from GCS metadata
     expected_size = blob.size
-    _log(
+    print(
         f"[chroma] downloading gs://{settings.GCS_BUCKET_NAME}/{settings.GCS_CHROMA_BLOB} "
-        f"({expected_size / 1024 / 1024:.1f} MB expected)..."
+        f"({expected_size / 1024 / 1024:.1f} MB)...",
+        flush=True,
     )
 
     max_attempts = 3
@@ -80,7 +63,6 @@ def _ensure_chroma_store() -> None:
         try:
             zip_path = tmp_dir / "chroma.zip"
             blob.download_to_filename(str(zip_path))
-            _log(f"[chroma] download_to_filename returned")
 
             actual_size = zip_path.stat().st_size
             if actual_size != expected_size:
@@ -94,7 +76,6 @@ def _ensure_chroma_store() -> None:
                 if bad_entry is not None:
                     raise IOError(f"zip integrity check failed on entry '{bad_entry}' - download is corrupted.")
 
-                _log(f"[chroma] downloaded and verified {actual_size / 1024 / 1024:.1f} MB, extracting...")
                 for info in zf.infolist():
                     # Defensive: zips built on Windows can store paths with
                     # backslashes, which zipfile only treats as a directory
@@ -109,7 +90,6 @@ def _ensure_chroma_store() -> None:
                     with zf.open(info) as source, open(target, "wb") as dest:
                         shutil.copyfileobj(source, dest)
 
-            _log("[chroma] extraction loop finished")
             extracted_root = tmp_dir / chroma_path.name
             if not extracted_root.exists():
                 raise RuntimeError(
@@ -119,10 +99,9 @@ def _ensure_chroma_store() -> None:
             if chroma_path.exists():
                 shutil.rmtree(chroma_path)
             shutil.move(str(extracted_root), str(chroma_path))
-            _log("[chroma] moved extracted store into place")
             break
         except Exception as e:
-            _log(f"[chroma] attempt {attempt}/{max_attempts} failed: {e}")
+            print(f"[chroma] attempt {attempt}/{max_attempts} failed: {e}", flush=True)
             shutil.rmtree(chroma_path, ignore_errors=True)
             if attempt == max_attempts:
                 raise RuntimeError(
@@ -136,7 +115,7 @@ def _ensure_chroma_store() -> None:
             f"[chroma] extraction completed but the store at {chroma_path} has no "
             f"documents in collection '{settings.CHROMA_COLLECTION}'."
         )
-    _log(f"[chroma] store ready at {chroma_path}.")
+    print(f"[chroma] store ready at {chroma_path}.", flush=True)
 
 
 def load_vector_store() -> Chroma:
