@@ -6,6 +6,7 @@ retrieves job postings that are semantically similar to a candidate's resume
 and lets the candidate interact with the results conversationally.
 
 **[Live Demo](https://llm-recruitment-tool.onrender.com/)**
+![Demo GIF](assets/demo.gif)
 
 Note: hosted on Render's free tier. The service spins down after 15 minutes
 of inactivity; the first request after idle time will be slower while it
