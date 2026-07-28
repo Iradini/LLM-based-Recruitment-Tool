@@ -1,141 +1,162 @@
-#  LLM-Powered Apps Final Project
+# LLM-Based Recruitment Tool
 
-## The Business problem
+Candidates spend hours manually comparing their CV against job descriptions
+and deciding what to apply for. This tool automates the comparison step: it
+retrieves job postings that are semantically similar to a candidate's resume
+and lets the candidate interact with the results conversationally.
 
-This project is related to LLMs. You want to create an app that is able to take a person's profile and look for job oportunities that would match it.
+**[Live Demo](https://llm-recruitment-tool.onrender.com/)**
 
-## About the data
+Note: hosted on Render's free tier. The service spins down after 15 minutes
+of inactivity; the first request after idle time will be slower while it
+restarts and reloads the vector store.
 
-In this project, we will work exclusively with a file `jobs.csv`.
+---
 
-You don't have to worry about downloading the data, it is already present in the dataset folder.
+## What it does
 
-This is a dataset for **creating a job-searching app**.
+The app is a Chainlit application with three selectable modes.
 
-## Technical aspects
+### Jobs finder Assistant
 
-To develop this Machine Learning model you can use the README.md. This file will guide you through all the steps you have to follow and the code you have to complete in the different parts of the project, also marked with a `TODO` comment.
+Upload a resume as PDF. The assistant summarizes it, retrieves the most
+semantically similar job postings from the vector store, and responds using
+only those retrieved postings and the resume content. The prompt explicitly
+instructs the model to say when a match is weak rather than inventing a
+justification, and to say when it lacks enough information to answer. It
+does not compute a numeric match score; honesty about fit is qualitative,
+driven by prompt instructions, not a scoring algorithm.
 
-## Install
+### Jobs Agent
 
-A `requirements.txt` file is provided with all the needed Python libraries for running this project. For installing the dependencies just run:
-```bash
-$ pip install -r requirements.txt
+The same resume-grounded job search as above, exposed as one tool to a
+tool-calling agent, plus a second tool that drafts a cover letter from the
+resume and a job description. The cover letter tool is a separate LLM call
+and is not constrained by the same anti-hallucination instructions as the
+job search tool.
+
+### Vanilla ChatGPT
+
+A general-purpose conversational assistant with chat memory. It does not
+read the uploaded resume, does not query the vector store, and has no
+grounding constraints. It is a plain chat interface, not a resume or career
+coaching tool.
+
+---
+
+## How it works
+
+```mermaid
+flowchart TD
+
+    U[User] -->|selects a mode, optionally uploads PDF| CL[Chainlit UI]
+
+    CL -->|on chat start| BOOT[Ensure vector store present]
+    BOOT -->|store missing locally| GCS[(GCS bucket: chroma.zip)]
+    BOOT -->|verify checksum, atomic swap into place| STORE[(Local Chroma store\n67875 chunks, 256-dim vectors)]
+
+    CL -->|Vanilla ChatGPT| CHAT[ChatAssistant\nno retrieval]
+    CL -->|Jobs finder Assistant| JFA[JobsFinderAssistant\nresume summary + retrieval]
+    CL -->|Jobs Agent| AGENT[JobsFinderAgent]
+
+    AGENT -->|tool: jobs_finder| JFA
+    AGENT -->|tool: cover_letter_writing| CL2[Cover letter chain\nnot retrieval grounded]
+
+    JFA --> RET[Retriever]
+    RET --> STORE
+    RET -->|embed query| EMB[Gemini gemini-embedding-001, 256-dim]
+
+    CHAT --> LLM[Gemini LLM]
+    JFA --> LLM
+    CL2 --> LLM
 ```
 
-*Note:* We encourage you to install those inside a virtual environment.
+1. On first request, the app checks for a local Chroma store. If none is present, it downloads a zipped store from Google Cloud Storage, verifies its size and CRC checksum against the source, and swaps it into place atomically (extract to a temp directory, then move), so a failed or partial download never leaves a broken store in place.
+2. A resume PDF, when uploaded, is converted to markdown by the LLM and summarized for use in retrieval queries.
+3. Retrieval is a similarity search against the Chroma vector store, using Google's gemini-embedding-001 embedding model truncated to 256 dimensions.
+4. The Jobs finder Assistant and the jobs_finder tool inside Jobs Agent build their responses from a prompt that is restricted to the retrieved postings and the resume text. Vanilla ChatGPT and the cover letter tool are not restricted in this way.
 
-## Configuration
+## Stack
 
-This project uses Google Gemini as the LLM provider. Configure your API key in the `.env` file:
-```bash
-LANGCHAIN_VERBOSE=true
-GEMINI_LLM_MODEL="gemini-3.1-flash-lite-preview"
-GOOGLE_API_KEY="your-google-api-key-here"
+Python, LangChain, ChromaDB, Google Gemini (LLM and embeddings), Chainlit,
+Render, Google Cloud Storage.
+
+LLM model in use: gemini-3.1-flash-lite-preview (configurable via
+GEMINI_LLM_MODEL).
+
+## Design decisions and tradeoffs
+
+### Embedding dimensionality: 256 instead of the model's native 3072.
+
+The full 67875-chunk index at native dimensionality requires roughly 850MB
+of memory to load, which exceeds Render's free-tier 512MB limit. Truncating
+to 256 dimensions (a supported feature of gemini-embedding-001) reduces
+the in-memory index to roughly 120MB. This is a real tradeoff, not a free
+optimization: truncated embeddings carry less semantic precision than the
+full-dimension vectors. It was chosen to keep the deployment on free-tier
+hosting rather than to maximize retrieval accuracy. Embedding cost is
+unaffected, since Gemini bills by input tokens, not output dimensionality.
+
+### Vector store hosted on Google Cloud Storage instead of committed to git.
+
+The zipped store is currently around 166MB, and its largest individual file
+exceeds GitHub's 100MB per-file limit. The app downloads it from a GCS
+bucket on boot instead of shipping it in the repository.
+
+### Static job dataset.
+
+The 7172 job postings backing the vector store are a fixed snapshot, not a
+live feed. Results reflect the state of the dataset at the time the vector
+store was built, not current job board listings.
+
+### Grounding is scoped to the job search path, not the whole app.
+
+Anti-hallucination prompt constraints exist only where the app is answering
+from retrieved data (Jobs finder Assistant, and the jobs_finder tool
+inside Jobs Agent). Vanilla ChatGPT and the cover letter tool are ordinary
+LLM calls without that constraint.
+
+## Running locally
+
+```
+git clone https://github.com/Iradini/LLM-based-Recruitment-Tool
+cd LLM-based-Recruitment-Tool
+pip install -r requirements.txt
+# copy env.example to .env and set GOOGLE_API_KEY
+chainlit run backend/app.py
 ```
 
-You can get a free API key from [Google AI Studio](https://aistudio.google.com/).
 
-## Run ETL Pipeline
+This starts the app, but the job search modes need a populated vector
+store. There are two ways to get one:
 
-To run the ETL pipeline and create a chroma vector database once you finish completing the code, run:
-```bash
-$ python backend/etl.py
+* **Use a hosted store**: set GCS_BUCKET_NAME, GCS_CHROMA_BLOB, and GOOGLE_APPLICATION_CREDENTIALS in .env to point at a GCS bucket you control and have already populated. The app will download it on first request.
+* **Build your own store**: run **python backend/etl.py** against the provided **dataset/jobs.csv**. This calls the Gemini embeddings API for every chunk in the dataset (67875 chunks in the full run), which is billed per token and takes a non-trivial amount of time.
+  If neither is configured, the app starts with an empty vector store: it
+  will run, but Jobs finder Assistant and Jobs Agent will return no matches
+  until a store is populated.
+
+## Testing
+
+
+The backend has unit test coverage for the ETL pipeline, the retriever, and
+each model class (*ChatAssistant*, *JobsFinderAssistant*, *JobsFinderAgent*,
+the resume summarizer chain, and PDF utilities). Run with:
+
+```
+python -m pytest tests
 ```
 
-## Run Project
+## Known limitations
 
-In order to execute the project you need to launch a Chainlit server running:
-```bash
-$ python -m chainlit run -w backend/app.py
-```
+* Render's free tier spins down after 15 minutes idle and wipes the filesystem on restart, so the vector store re-downloads from GCS after any idle period.
+* The job dataset is static; there is no live job board integration.
+* Vanilla ChatGPT and the cover letter tool are not grounded in retrieved data or the resume in the same way the job search path is.
+* There is no numeric or structured match score between a resume and a job posting; fit assessment is a qualitative statement generated by the LLM under prompt instructions.
 
-## Code Style
+## What I'd do with more time
 
-Following a style guide keeps the code's aesthetics clean and improves readability, making contributions and code reviews easier. Automated Python code formatters make sure your codebase stays in a consistent style without any manual work on your end. If adhering to a specific style of coding is important to you, employing an automated to do that job is the obvious thing to do. This avoids bike-shedding on nitpicks during code reviews, saving you an enormous amount of time overall.
-
-We use [Black](https://black.readthedocs.io/) for automated code formatting in this project, you can run it with:
-```console
-$ black --line-length=88 .
-```
-
-Wanna read more about Python code style and good practices? Please see:
-- [The Hitchhiker's Guide to Python: Code Style](https://docs.python-guide.org/writing/style/)
-- [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)
-
-## Tests
-
-We've added some basic tests for the backend service:
-
-- test_utils.py for utils.py.
-- test_chatgpt_clone.py for chatgpt_clone.py.
-- test_jobs_finder.py for jobs_finder.py.
-- test_jobs_finder_agent.py for jobs_finder_agent.py.
-- test_resume_summarizer_chain.py for resume_summarizer_chain.py.
-- test_etl.py for etl.py.
-- test_retriever.py for retriever.py.
-
-To run just execute:
-```bash
-$ python -m pytest tests
-```
-
-If you want to learn more about testing Python code, please read:
-- [Effective Python Testing With Pytest](https://realpython.com/pytest-python-testing/)
-- [The Hitchhiker's Guide to Python: Testing Your Code](https://docs.python-guide.org/writing/tests/)
-
-
-## Structure to be completed
-
-WEEK 1:
-
-DAY 1:
-
-- Get all the requirements installed in a virtual env and the chainlit app running.
-- Complete the function `pdf_to_markdown()` at `backend/utils.py`.
-    - Read the raw PDF bytes and encode them as base64.
-    - Create a multimodal `HumanMessage` with text instructions and the PDF media.
-    - Invoke the LLM and return the markdown content.
-
-DAY 2:
-
-- Complete the code for the class `ChatAssistant()` at `backend/models/chatgpt_clone.py`:
-    - Create a string template for the chat assistant.
-    - Create a prompt template using the string template created above.
-    - Create an instance of an LLM using the `get_llm` factory function with the appropriate settings.
-    - Create an instance of `LLMChain` with the appropriate settings.
-
-WEEK 2:
-
-DAY 1:
-
-- Complete the code for the `ETLProcessor()` class at `backend/etl.py`.
-    - Create a text splitter using the `RecursiveCharacterTextSplitter` class.
-    - Load the dataset from the `dataset_path` using the `pandas.read_csv()` function.
-- Run `backend/etl.py` to create the initial dataset with vector embeddings.
-
-DAY 2:
-
-- Complete the code for the `JobsFinderAssistant()` class at `backend/models/jobs_finder.py`.
-    - Create a string template for the chat assistant.
-    - Create a prompt template using the string template created above.
-    - Create an instance of an LLM using the `get_llm` factory function with the appropriate settings.
-    - Create an instance of `LLMChain` with the appropriate settings.
-    - Use the human input and the user resume summary to search for jobs.
-
-WEEK 3:
-
-DAY 1:
-- Complete the missing elements in `backend/models/resume_summarizer_chain.py`. This creates a summarized resume chain for `backend/models/jobs_finder.py`.
-    - Create a string template for this chain.
-    - Create a prompt template using the string template created above.
-    - Create an instance of an LLM using the `get_llm` factory function with the appropriate settings.
-    - Create an instance of `LLMChain` with the appropriate settings.
-
-
-DAY 2:
-- Complete the function `build_cover_letter_writing()` at `backend/models/jobs_finder_agent.py`.
-    - Create a string template for this chain.
-    - Create a prompt template using the string template created above.
-    - Create an instance of `LLMChain` with the appropriate settings.
-- Complete the `self.llm` initialization in the `JobsFinderAgent` class.
+* Replace the static job dataset with a live job feed API.
+* Add candidate-side analytics, such as a skill gap report per role.
+* Implement session persistence so users can return to previous searches.
+* Extend anti-hallucination grounding to the cover letter tool.
